@@ -1,0 +1,263 @@
+---
+title: "Is gorwth of netflix affected by COVID-19?"
+author: "akbari62"
+date: "25-3-2021"
+output:
+  html_document: default
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r warning=FALSE, include=FALSE}
+library(arsenal)
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(lubridate)
+library(plotly)
+library(patchwork)
+library(readr)
+library(RColorBrewer)
+library(tidyverse)
+library(tidyr)
+library(tm)
+library(vcd)
+library(wordcloud)
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dataset <- read.csv('netflix_titles.csv')
+```
+
+
+
+# Introduction
+Netflix industry is most popular online entertainment platform as compared to other platform. The main aim of this report is to investigate the COVID-19 impact on Netflix. Because of the COVID-19 pandemic, most of the business and industries are down. Furthermore, identify which factor affected on Netflix. Due to the lock down, the number of subscriber are growing but it huge impact on added content on Netflix. So, findout the insides of data. 
+
+# Analysis  
+According to the dataset, There are two types of content available on netflix, Movies and TVshows. after analysing content the number of movies are almost 3 times more than tvshows on netflix, it was 68.4% and 31.6%, respectively. So, now analyze the content by countries.
+
+## More content produce countries
+```{r clean, warning=FALSE, include=FALSE}
+#preprocessing the dataset
+#converted into date formate
+dataset$date_added <- as.Date(dataset$date_added, format = "%B %d, %Y")
+dataset$date_added <- as.factor(dataset$date_added) 
+data.frame("variable"=c(colnames(dataset)), "it count the missing value"=sapply(dataset, function(x) sum(is.na(x))), row.names=NULL)
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+dataset$rating[is.na(dataset$rating)] <- getmode(dataset$rating)
+dataset=distinct(dataset,title,country,type,release_year, .keep_all= TRUE)
+```
+
+```{r echo=FALSE, fig.align='center', message=FALSE, warning=FALSE}
+k <- strsplit(dataset$country, split = ", ")
+dataset_countries<- data.frame(type = rep(dataset$type, sapply(k, length)), country = unlist(k))
+amount_by_country <- na.omit(dataset_countries) %>%
+  group_by(country, type) %>%
+  summarise(count = n())
+a <- reshape(data=data.frame(amount_by_country),idvar="country",
+                          v.names = "count",
+                          timevar = "type",
+                          direction="wide") %>% arrange(desc(count.Movie)) %>%
+                          top_n(15)
+names(a)[2] <- "Number_of_Movies"
+names(a)[3] <- "Number_of_TV_Shows"
+a <- a[order(desc(a$Number_of_Movies +a$Number_of_TV_Shows)),] 
+graph1 <- ggplot(a, aes(Number_of_Movies, Number_of_TV_Shows, colour=country))+ 
+  geom_point(size=3)+
+  xlab("Movies") + ylab("TV Shows")+
+  ggtitle("top  15 countries content added in Netflix")+
+ theme(panel.background = element_rect(fill = '#445B5A')
+        ,panel.grid.minor = element_line(color = '#4d5566')
+        ,panel.grid.major = element_line(color = '#586174')) 
+ggplotly(graph1)
+```
+From above graph show the information about type of content produce by top 15 countries. First, analyse the most content produced country. United State has most content(TV shows and Movies) produced country, which is approximately 1923 Movies and 686 TVshows. From graph demonstrate that majority of people preferred to watch movies rather than TV shows. Graph seems that the United Kingdom added more TVshows than Movies in netflix( if, you can select particular part and hover that point you can see the information).India has the second highest movie produced country and it was 782 movies. The more TV shows produced countries are namely,Japan, South Korea,Taiwan, Colombia. However, countries such as Turkey, Australia, China, Mexico, Germany, Spain, France added more movies on netflix. Overall, there are major number of movies are added than TV shows, because, people are prefer to watch 2 or 3 hour drama instead or full TV series. 
+
+## Content Produced by the United States 
+After analysing of most content producing countries I interested to focus on content produced by the United state. Mainly focus on how much content added on netflix by year. From that we can analyse that in which month more content is produced. 
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#combine the dataset and filter United state country and group of date added by year
+
+dataset_india <- dataset %>% 
+        filter(country == "United States") %>%
+        group_by(date_added) %>% 
+        summarise(count = n_distinct(title,  na.rm = TRUE)) 
+#now plot the scatter line graph for visulisation
+graph2 <- dataset_india %>% 
+  highlight_key(~count) %>%
+  plot_ly(x=~date_added, y = ~count, type = 'scatter', mode = 'lines', line = list(color = '#aee8e1', width = 2)) %>% 
+  layout(title = "United States Content",
+             xaxis = list(title = "Added year and date"),
+             yaxis = list (title = "New content on netflixt"),
+        paper_bgcolor='#2E2E2E',
+        plot_bgcolor='#2E2E2E',font = list(color = '#00FFFF'))
+        
+graph2
+
+```
+Above Line graph illustrate the information about, content added by United States. It can be seen that the produced content gradually increase through out the year of time period  given in graph. In year 2019, there are more content added as compared to previous years. In first 6 months of the year 2019, the produced content on netflix was decrease because of COVID-19 pandemic and lockdown happens,but in next month it dramatically increase and added 43 Movies and TVShows on Netflix. It was fluctuated during the year of 2019. In 2020, the number of content added by United States was reach high peak at about 60 Movies and TVShows added on netflix. It was shows that, in first four month of every year, the United State produce movies and Tv shows and added on Netflix.
+
+
+From above graph, conclude that the COVID-19 is affected the content added on Netflix by United States.
+
+
+Next, analysing on content rating by contents.
+
+## Is rating change according to content?
+
+Now, Analyse the rating criteria by per countries
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+#theme_set(theme_classic())
+df_by_rating_full <- dataset %>% group_by(rating, type) %>% summarise(count = n())
+w2 <- reshape(data=data.frame(df_by_rating_full),idvar="rating",
+                          v.names = "count",
+                          timevar = "type",
+                          direction="wide") %>% arrange(desc(count.Movie)) %>%
+                          top_n(10)
+names(w2)[2] <- "count_movie"
+names(w2)[3] <- "count_tv_show"
+w2 <- w2[order(desc(w2$count_movie+w2$count_tv_show)),] 
+
+
+graph3 <- plot_ly(w2, x = w2$rating, y = ~count_movie, type = 'bar', name = 'Movie',marker = list(color = 'rgb(49,130,189)'))
+graph3 <- graph3 %>% add_trace(y = ~count_tv_show, name = 'TV Show', marker = list(color = 'rgb(204,204,204)'))
+graph3 <- graph3 %>% layout(xaxis=list(categoryorder = "array", categoryarray = w2$rating, title="Rating"), yaxis = list(title = 'Count'), barmode = 'stack',title="Content(Movies, TVshows) By Rating")
+
+graph3
+```
+
+
+R and NR company gives more rating on movies content while TV-Y and TV-Y7-FV are giving more reviews on TVshow-content. Morever, TV-Y7 and TV-G gives equal rating to both (tvshows and movies). The rating company TV-MA gave highest rating on content(TV shows and movies) as compared to the all other rating( above 2000 rating on content), it was 1347 to movies, 679 TVShows. The second most rating company is TV-14, it gaves approximately 1038 rating on movies and 659 on tvshows.
+overall, we conclude that tv shows has low rating and movies has highest rating content because the ratio of movies and tvshows are not equal. Movies are 3 time more than TVshows so, that is the reason Tvshows content has low rating in netflix.
+
+
+## which type of genre people prefer to watch more.
+
+Now, I inspired to do more analysis on the United States content so I created pie chart which shows that, which type of genre people prefer to watch more in United States on Netflix. There are 32 genre into that Documentaries type of genre more produced in United States.
+
+```{r echo=FALSE, fig.width=8, message=FALSE, warning=FALSE}
+dataset <- dataset%>% 
+       separate(listed_in, c("Genre 1", "Genre 2", "Genre 3"), sep = ",") %>% 
+       separate(country, c("country", "country_2", "country_3"), sep = ",") %>%
+       mutate(duration = str_remove_all(duration, "min")) 
+
+USpiechart <- dataset %>% filter(country == "United States") %>% 
+          group_by(`Genre 1`) %>%
+          summarise(count = n_distinct(title,  na.rm = TRUE))%>%
+          rename(genre = `Genre 1`)
+
+graph4 <- plot_ly(data = USpiechart, type='pie', labels= ~genre, values= ~count) %>% 
+        layout(
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+
+graph4
+
+```
+Pie chart demonstrate that, Documentaries type of genre produce more in United States it about 14.5%, second more produce genre us dramas. The contribution of comedies and children 
+and family movies are almost same. 
+
+
+Folks are more like to watch documentaries, dramas, comedies and children and family movies because more of that are enjoying their weekends with there families and spend time together by watching Netflix.
+
+The least amount of genre produce in United States is that Tvshows, anime features, romantic movies, sci-fi and fantasy, music and musicals, cult movies, anime series, tv horror, british tv shows, independent movies, classic and cult tv, international tvshows are less than 20 genres on Netflix in United States. While more than 180 number of genre produced by United States, in particular genre types such as Kid's TV, Stand-up comedy, crime TV shows, horror movies. overall United states produce more documentaries, dramas and comedy movies so people engage more.
+
+## What type of content United Kingdom produced
+
+After analysing the United states genres, I interested in what type of content produced in India so we analyse the data of india.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+ukpiechart <- dataset %>% filter(country == "United Kingdom") %>% 
+             group_by(`Genre 1`) %>%
+             summarise(count = n_distinct(title,  na.rm = TRUE)) %>%
+             rename(genre = `Genre 1`) %>%
+             top_n(10)
+
+graph5<-  plot_ly(data = ukpiechart, type='pie', labels= ~genre, values= ~count) %>% 
+         layout(title = 'Content produced by United Kingdom',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)) 
+
+graph5
+
+```
+From above pie chart, we can show the information about types of genre produced by  United kingdom country. I analyse the first top 10 genre added in Netflix, In United kingdom highest number of british tv shows added on Netflix, it was about 41% and second most added content is Documentaries, which was 19%, so the uk produce more documentaries than united states.
+
+There are almost equal number of dramas produced by both countries by 13% namely, United kingdom and united states. There are nearly same number of dramas and action and adventure movies added on netflix, 8.24% and 6.68% respectively. The least amount of genre produced in United kingdom was stand-up comedy, children and family movies, classic movies.
+
+
+Overall, United states produce more content on documentaries and dramas while United kingdom produce more content on British TV shows and dramas. It is depends on what people prefer to watch more it can change accordingly countries.
+
+## which director get more profit?
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+dataset1 <- dataset[!is.na(dataset$cast), ]
+dataset2 <- dataset1 %>% 
+  mutate(cast = strsplit(as.character(cast), ", "))%>%
+  unnest(cast)%>%
+  group_by(cast) %>%
+  summarise(count = n()) %>%
+ arrange(desc(count)) %>%
+ top_n(10)
+  
+graph6 <- dataset2 %>% ggplot(aes(reorder(cast,count),count))+
+ geom_col(fill ="darkblue")+
+theme(
+    panel.grid = element_blank()) +
+coord_flip()   +
+    labs(x= "Actors",y= "Number of movies",
+        title = 'Actor performance' )
+ggplotly(graph6)
+
+
+```
+From above bar graph we can see that anupam kher work on more movies as compared to other cast, it was more than 30 movies. After, shah rukh khan is a famous actor in india he work on 30 movies. Boman Irani work on less movies than Amitabh Bachchan. While paresh rawal and takahiro sakurai works on same movies which was in 25 movies and akshay kumar and yuki kaji belongs to different countries and they produce same movies or TV shows. The actor om puri and naseeruddin shah produce same movies. 
+
+
+Overall, Indian actor works on more movies than other cast of countries.
+
+Now, I am interested to see the analysis on director performance
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+dataset3 <- dataset[!is.na(dataset$director), ]
+dataa <- dataset3 %>% 
+  mutate(director = strsplit(as.character(director), ", ")) %>%
+  unnest(director)%>%
+  group_by(director) %>%
+  summarise(count = n()) %>%
+ arrange(desc(count)) %>%
+ top_n(10)
+
+graph7 <- dataa%>% ggplot(aes(reorder(director,count),count))+
+ geom_col(fill = "DarkSalmon")+
+theme(
+    panel.grid = element_blank(),) +
+coord_flip() +
+    labs(x = "Directors",y="Number of movies directed",
+        title = 'Director performance')
+ggplotly(graph7)
+```
+In bar graph, we shows that jan suter is highest directed movies or tvshows as compared to other directors which was about more than 20.
+Furthermore, marcus raboy and jay karas directed exectly equal number of content(14). While umesh mehra, shannon hartman, lance bangs, johnnie to, david dhawan directed low number of movies and tvshows, it was less than 10. Next, steven spielberg and jay chapman produce almost 10 movies. So, Jan Suter is highest directed movies or tvshows on Netflix.
+
+
+# Conclusion 
+
+To conclude, there are various type of intuiation reveals from above graphs.United states produce more documentaries while united kingdom produce British TV shows. it is vary accordingly people and countries. Due to COVID-19, it was huge impact on producing genre in all countries and there are less number of Content added on Netflix. Due to lack of data I am not able to analyse the full detail of netflix, people watch history, revenue and budgets according countries.
+
+
+# References
+How to put reference in rmd file
+[1. Reference1][id]
+---
+
+
+[id]: https://www.kaggle.com
